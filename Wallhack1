@@ -1,0 +1,209 @@
+เราก็ทำการเรียงค่าก่อนตามตัวอย่างดังนี้
+
+#define CounterTerrorist (( NumVertices == 3869 && primCount == 4974 ) || ( NumVertices == 2485 && primCount == 2998 ) || ( NumVertices == 1605 && primCount == 1782 ) || ( NumVertices == 888 && primCount == 892 ) || ( NumVertices == 506 && primCount == 445 ) || ( NumVertices == 371 && primCount == 297 ))
+#define Terrorist (( NumVertices == 3570 && primCount == 5034 ) || ( NumVertices == 2331 && primCount == 3048 ) || ( NumVertices == 1495 && primCount == 1846 ) || ( NumVertices == 902 && primCount == 993 ) || ( NumVertices == 575 && primCount == 539 ) || ( NumVertices == 400 && primCount == 377 ))
+
+ให้สังเกตุที่ตัวเลขดูน่ะครับว่าต้องใส่ตรงจุดไหนบ้าง ต่อไปคือการเอามาใส่ C++
+สร้าง Main.h แล้วใส่โค้ดด้านล่างนี้ลงไป
+
+#define WIN32_LEAN_AND_MEAN
+#ifndef _MAIN_H
+#define _MAIN_H
+char *GetDirectoryFile(char *filename);
+void __cdecl add_log (const char * fmt, ...);
+void *DetourFunc(BYTE *src, const BYTE *dst, const int len);
+bool RetourFunc(BYTE *src, BYTE *restore, const int len);
+#endif
+
+สร้าง Main.cpp แล้วใส่โค้ดด้านล่างนี้ลงไป
+
+//----------------------------------------------------------------------------------------------------------------------------------
+#include <windows.h>
+//----------------------------------------------------------------------------------------------------------------------------------
+#include "Main.h"
+//-----------------------------------------------------------------------------------------------------------------------------------
+#include <mmsystem.h>
+#pragma comment(lib, "winmm.lib")
+//-----------------------------------------------------------------------------------------------------------------------------------
+#include <stdio.h>
+//-----------------------------------------------------------------------------------------------------------------------------------
+#include <fstream>
+//-----------------------------------------------------------------------------------------------------------------------------------
+#include "detours.h"
+#pragma comment(lib,"detours.lib")
+//-----------------------------------------------------------------------------------------------------------------------------------
+#include <d3d9.h>
+#include <d3dx9.h>
+#pragma comment(lib, "d3d9.lib")
+#pragma comment(lib, "d3dx9.lib")
+//-----------------------------------------------------------------------------------------------------------------------------------
+using namespace std;
+//---------------------------------------------------------------------------------------------------------------------------------
+
+#define HOOK(func,addy) o##func = (t##func)DetourFunction((PBYTE)addy,(PBYTE)hk##func) //Quick Hook using MS Detour
+#define UNHOOK(func,addy) o##func = (t##func)DetourFunction((PBYTE)addy,(PBYTE)o##func) //Quick Unook using MS Detour
+//---------------------------------------------------------------------------------------------------------------------------------
+#define ES  0 //EndScene
+#define DIP 1 //DrawIndexedPrimitive
+#define RES 2 //Reset
+//------------------------------------------------ ค่า Model ที่่เราได้มาเอามาใส่ตรงนี้ น่ะครับ ---------------------------------------------------------------------------------
+#define CounterTerrorist (( NumVertices == 3869 && primCount == 4974 ) || ( NumVertices == 2485 && primCount == 2998 ) || ( NumVertices == 1605 && primCount == 1782 ) || ( NumVertices == 888 && primCount == 892 ) || ( NumVertices == 506 && primCount == 445 ) || ( NumVertices == 371 && primCount == 297 ))
+#define Terrorist (( NumVertices == 3570 && primCount == 5034 ) || ( NumVertices == 2331 && primCount == 3048 ) || ( NumVertices == 1495 && primCount == 1846 ) || ( NumVertices == 902 && primCount == 993 ) || ( NumVertices == 575 && primCount == 539 ) || ( NumVertices == 400 && primCount == 377 ))
+
+//---------------------------------------------------------------------------------------------------------------------------------
+LPDIRECT3DDEVICE9 npDevice; //pDevice is stored here so we can hook through the VTable
+//---------------------------------------------------------------------------------------------------------------------------------
+LPD3DXFONT    g_pFont = NULL; //D3D Font
+LPD3DXLINE	  g_pLine = NULL; //D3D Line
+D3DVIEWPORT9	g_ViewPort; //ViewPort
+//---------------------------------------------------------------------------------------------------------------------------------
+LPDIRECT3DVERTEXBUFFER9 Stream_Data;
+UINT Offset = 0;
+UINT Stride = 0;
+UINT texnum = 0;
+//---------------------------------------------------------------------------------------------------------------------------------
+ofstream myfile; //Used for logging to a text file
+//---------------------------------------------------------------------------------------------------------------------------------
+typedef HRESULT (WINAPI* tEndScene)(LPDIRECT3DDEVICE9 pDevice);
+tEndScene oEndScene = NULL;
+typedef HRESULT (WINAPI* tDrawIndexedPrimitive)(LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimType,INT BaseVertexIndex,UINT MinVertexIndex,UINT NumVertices,UINT startIndex,UINT primCount);
+tDrawIndexedPrimitive oDrawIndexedPrimitive = NULL;
+typedef HRESULT(WINAPI* tReset)(LPDIRECT3DDEVICE9 pDevice, D3DPRESENT_PARAMETERS* pPresentationParameters);
+tReset oReset = NULL;
+//---------------------------------------------------------------------------------------------------------------------------------
+PBYTE HookVTableFunction( PDWORD* dwVTable, PBYTE dwHook, INT Index )
+{
+	DWORD dwOld = 0;
+	VirtualProtect((void*)((*dwVTable) + (Index*4) ), 4, PAGE_EXECUTE_READWRITE, &dwOld);
+	PBYTE pOrig = ((PBYTE)(*dwVTable)[Index]);
+	(*dwVTable)[Index] = (DWORD)dwHook;
+	VirtualProtect((void*)((*dwVTable) + (Index*4)), 4, dwOld, &dwOld);
+	return pOrig;
+}
+//-----------------------------------------------------------------------------------------------------------------------------------
+HRESULT WINAPI hkEndScene(LPDIRECT3DDEVICE9 pDevice)
+{
+	myfile << "EndScene is hooked\n";			 //Check log
+	while(!npDevice) {
+		npDevice = pDevice;					   //Here we store pDevice so we can re-hook with a VTable hook later.
+	}
+
+												
+	if(g_pFont == NULL) D3DXCreateFont(pDevice, 15, 0, FW_BOLD, 1, 0, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, "Verdana", &g_pFont); //Create fonts
+												
+	if(g_pLine == NULL) D3DXCreateLine(pDevice, &g_pLine); //Create lines
+	pDevice->GetViewport(&g_ViewPort);
+	return oEndScene(pDevice);
+}
+//---------------------------------------------------------------------------------------------------------------------------------
+HRESULT WINAPI hkDrawIndexedPrimitive(LPDIRECT3DDEVICE9 pDevice, D3DPRIMITIVETYPE PrimType,INT BaseVertexIndex,UINT MinVertexIndex,UINT NumVertices,UINT startIndex,UINT primCount)
+{
+	myfile << "DIP is hooked\n";				  //Check log
+	if(pDevice->GetStreamSource(0, &Stream_Data, &Offset, &Stride) == D3D_OK)
+		Stream_Data->Release();
+/********************************************  WallHack  *****************************************************************************/
+if (Terrorist)
+{
+  pDevice->SetRenderState(D3DRS_ZENABLE,false);
+  oDrawIndexedPrimitive(pDevice, PrimType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+  pDevice->SetRenderState(D3DRS_ZENABLE,true);
+  oDrawIndexedPrimitive(pDevice, PrimType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+}
+if (CounterTerrorist)
+{
+  pDevice->SetRenderState(D3DRS_ZENABLE,false);
+  oDrawIndexedPrimitive(pDevice, PrimType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+  pDevice->SetRenderState(D3DRS_ZENABLE,true);
+  oDrawIndexedPrimitive(pDevice, PrimType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+}
+/***********************************************************************************************************************************/
+	return oDrawIndexedPrimitive(pDevice, PrimType, BaseVertexIndex, MinVertexIndex, NumVertices, startIndex, primCount);
+}
+//---------------------------------------------------------------------------------------------------------------------------------
+HRESULT WINAPI hkReset(LPDIRECT3DDEVICE9 pDevice, D3DPRESENT_PARAMETERS* pPresentationParameters)
+{
+	myfile << "Reset is hooked\n";				//Check log
+	if( g_pFont )
+		g_pFont->OnLostDevice();
+	if( g_pLine )
+		g_pLine->OnLostDevice();
+	HRESULT iReturnValue = oReset(pDevice, pPresentationParameters);
+	if(iReturnValue == D3D_OK) {
+		if( g_pFont )
+			g_pFont->OnResetDevice();
+		if( g_pLine )
+			g_pLine->OnResetDevice();
+	}
+	return iReturnValue;
+}
+//-----------------------------------------------------------------------------------------------------------------------------------
+LRESULT CALLBACK MsgProc(HWND hwnd,UINT uMsg,WPARAM wParam,LPARAM lParam){return DefWindowProc(hwnd, uMsg, wParam, lParam);}
+void DX_Init(DWORD* table)
+{
+	WNDCLASSEX wc = {sizeof(WNDCLASSEX),CS_CLASSDC,MsgProc,0L,0L,GetModuleHandle(NULL),NULL,NULL,NULL,NULL,"DX",NULL};
+	RegisterClassEx(&wc);
+	HWND hWnd = CreateWindow("DX",NULL,WS_OVERLAPPEDWINDOW,100,100,300,300,GetDesktopWindow(),NULL,wc.hInstance,NULL);
+	LPDIRECT3D9 pD3D = Direct3DCreate9( D3D_SDK_VERSION );
+	D3DPRESENT_PARAMETERS d3dpp;
+	ZeroMemory( &d3dpp, sizeof(d3dpp) );
+	d3dpp.Windowed = TRUE;
+	d3dpp.SwapEffect = D3DSWAPEFFECT_DISCARD;
+	d3dpp.BackBufferFormat = D3DFMT_UNKNOWN;
+	LPDIRECT3DDEVICE9 pd3dDevice;
+	pD3D->CreateDevice(D3DADAPTER_DEFAULT,D3DDEVTYPE_HAL,hWnd,D3DCREATE_SOFTWARE_VERTEXPROCESSING,&d3dpp,&pd3dDevice);
+	DWORD* pVTable = (DWORD*)pd3dDevice;
+	pVTable = (DWORD*)pVTable[0];
+	table[ES]   = pVTable[42];					//EndScene address
+	table[DIP]  = pVTable[82];					//DrawIndexedPrimitive address
+	table[RES]  = pVTable[16];					//Reset address
+	DestroyWindow(hWnd);
+}
+//------------------------------------------------------------------------------------------------------------------------------------
+DWORD WINAPI VirtualMethodTableRepatchingLoopToCounterExtensionRepatching( LPVOID  Param )
+{
+	while(1) {
+		Sleep(100);
+		HookVTableFunction((PDWORD*)npDevice, (PBYTE)hkDrawIndexedPrimitive, 82); //Hook DrawIndexedPrimitive
+		HookVTableFunction((PDWORD*)npDevice, (PBYTE)hkEndScene, 42); //Hook EndScene
+		HookVTableFunction((PDWORD*)npDevice, (PBYTE)hkReset, 16); //Hook Reset
+	}
+	return 1;
+}
+//------------------------------------------------------------------------------------------------------------------------------------
+bool hooked = false;
+DWORD WINAPI LoopFunction( LPVOID lpParam  )
+{
+	while(1) {
+		if( hooked == false) {
+			DWORD VTable[3] = {0};
+			while(GetModuleHandle("d3d9.dll")==NULL) {
+				Sleep(250);
+			}
+			DX_Init(VTable);
+			HOOK(EndScene,VTable[ES]);			//Hook EndScene as a device discovery hook
+			while(!npDevice) {
+				Sleep(50); //Sleep until npDevice is not equal to NULL
+			}
+			UNHOOK(EndScene, VTable[ES]);		 //Unhook as soon as we have a valid pointer to pDevice
+			*(PDWORD)&oDrawIndexedPrimitive = VTable[DIP];
+			*(PDWORD)&oEndScene = VTable[ES];
+			*(PDWORD)&oReset = VTable[RES];
+			CreateThread(NULL,0,&VirtualMethodTableRepatchingLoopToCounterExtensionRepatching,NULL,0,NULL); //Create hooking thread
+			hooked = true;
+			Sleep(200);
+		}
+	}
+	return 0;
+}
+//------------------------------------------------------------------------------------------------------------------------------------
+BOOL WINAPI DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpvReserved)
+{
+	if(dwReason == DLL_PROCESS_ATTACH) {
+		CreateThread(0, 0, LoopFunction, 0, 0, 0);
+	}
+	else if(dwReason == DLL_PROCESS_DETACH) {
+		myfile.close();
+	}
+	return TRUE;
+}
+//--------------------------------------------------------------------------------------
